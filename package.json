@@ -1,11 +1,11 @@
 {
-  "name": "05_proyecto_clima",
-  "version": "0.1.0",
+  "name": "gptw-mbc-2026",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack -p 3001",
-    "build": "next build --webpack",
-    "start": "next start -p 3001",
+    "dev": "next dev -p 5008",
+    "build": "next build",
+    "start": "next start -p 5008",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate deploy",

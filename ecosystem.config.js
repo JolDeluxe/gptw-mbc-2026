@@ -1,9 +1,9 @@
 module.exports = {
   apps: [
     {
-      name: "gptw-mbc",
+      name: "gptw-2026",
       script: "node_modules/next/dist/bin/next",
-      args: "start -p 3001",
+      args: "start -p 5008",
       cwd: "./",
       interpreter: "node",
       instances: 1,
@@ -13,10 +13,10 @@ module.exports = {
       max_memory_restart: "1G",
       env: {
         NODE_ENV: "production",
-        PORT: 3001,
+        PORT: 5008,
         DATABASE_URL: "file:./dev.db",
         JWT_SECRET: "super_secreto_clave_mbc_2026_cuadra",
-        IMAGES_BASE_PATH: "C:\\Servidor\\Datos\\Clima",
+        IMAGES_BASE_PATH: "C:\\Servidor\\Datos\\gptw-2026",
       },
       error_file: "logs/pm2-error.log",
       out_file: "logs/pm2-out.log",

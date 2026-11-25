@@ -22,6 +22,8 @@ const withPWA = require("next-pwa")({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Silenciar advertencia de plugin PWA con Turbopack
+  turbopack: {},
   async redirects() {
     return [
       {

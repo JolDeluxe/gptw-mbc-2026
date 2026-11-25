@@ -7,75 +7,45 @@ datasource db {
 }
 
 // ======================================================
-// ÁREAS
-// Contenedores macro del sistema
-// Ej: DIRECCION, OPERACIONES, CAPITAL HUMANO
+// NODO DE MENÚ / ORGANIZACIÓN (Árbol N-Niveles)
+// Permite cualquier profundidad:
+// DIRECCION -> PRODUCTO TERMINADO -> CENTRO DE ANALISIS
+// OPERACIONES -> BOTAS -> BOTAS I -> CORTE
 // ======================================================
-model Area {
-  id            Int            @id @default(autoincrement())
-  nombre        String
-  orden         Int            @default(1)
+model MenuNode {
+  id           Int          @id @default(autoincrement())
+  nombre       String
+  orden        Int          @default(1)
+  imageName    String?      // Archivo de imagen asociado (ej. "1.png", "esquema.jpg")
+  tipoEspecial String?      // "mbc" (color café) | "esquema" (color negro) | null (estilo normal)
+  parentId     Int?
+  parent       MenuNode?    @relation("MenuHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     MenuNode[]   @relation("MenuHierarchy")
 
-  departamentos Departamento[]
-}
-
-// ======================================================
-// DEPARTAMENTOS
-// Agrupadores dentro de un Área
-// Ej: Producción, Corte, Calidad
-// ======================================================
-model Departamento {
-  id               Int            @id @default(autoincrement())
-  nombre           String
-  orden            Int            @default(1)
-
-  areaId           Int
-  area             Area           @relation(fields: [areaId], references: [id], onDelete: Cascade)
-
-  subdepartamentos SubDepartamento[]
-}
-
-// ======================================================
-// SUBDEPARTAMENTOS (ENTREGABLE REAL)
-// Aquí vive el activo visual (imagen)
-// Ej: Jefe Raúl, Coord. Víctor, Reporte Global
-// ======================================================
-model SubDepartamento {
-  id             Int            @id @default(autoincrement())
-  nombre         String
-  imageName      String
-  orden          Int            @default(1)
-
-  departamentoId Int
-  departamento   Departamento   @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
-
-  permisos       UserPermission[]
+  permisos     UserPermission[]
 }
 
 // ======================================================
 // USUARIOS
-// Identidad + rol (el rol NO decide permisos finales)
 // ======================================================
 model User {
-  id       Int            @id @default(autoincrement())
-  username String         @unique
+  id       Int              @id @default(autoincrement())
+  username String           @unique
   password String
   nombre   String
-  role     String         @default("NIVEL 5")
+  role     String           @default("NIVEL 5")
 
   permisos UserPermission[]
 }
 
 // ======================================================
-// PERMISOS
-// Fuente de verdad de qué puede ver cada usuario
+// PERMISOS DE USUARIO
 // ======================================================
 model UserPermission {
-  id                Int             @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  userId            Int
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  subDepartamentoId Int
-  subDepartamento   SubDepartamento @relation(fields: [subDepartamentoId], references: [id], onDelete: Cascade)
+  menuNodeId Int
+  menuNode   MenuNode  @relation(fields: [menuNodeId], references: [id], onDelete: Cascade)
 }

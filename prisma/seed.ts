@@ -2,9 +2,6 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { runSeed } from "./seed.engine";
 
-// ======================================================
-// CONFIGURACIÓN DE PRISMA
-// ======================================================
 const databaseUrl = process.env.DATABASE_URL || "file:./dev.db";
 
 const prisma = new PrismaClient({
@@ -13,29 +10,18 @@ const prisma = new PrismaClient({
   }),
 });
 
-// ======================================================
-// FUNCIÓN PRINCIPAL
-// ======================================================
 async function main() {
   console.log("🧹 Limpiando base de datos...");
-
-  // ⚠️ ORDEN IMPORTANTE (por relaciones)
   await prisma.userPermission.deleteMany();
-  await prisma.subDepartamento.deleteMany();
-  await prisma.departamento.deleteMany();
-  await prisma.area.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.menuNode.deleteMany();
 
-  console.log("🌱 Sembrando datos del sistema...");
-
+  console.log("🌱 Sembrando estructura 2026...");
   await runSeed();
 
-  console.log("✅ Seed ejecutado correctamente.");
+  console.log("✅ Seed 2026 ejecutado correctamente.");
 }
 
-// ======================================================
-// EJECUCIÓN
-// ======================================================
 main()
   .catch((error) => {
     console.error("❌ Error ejecutando seed:", error);

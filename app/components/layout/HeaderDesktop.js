@@ -1,98 +1,121 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 export default function HeaderDesktop({ user }) {
   const router = useRouter();
   const [menu, setMenu] = useState([]);
-
-  const [areaActiva, setAreaActiva] = useState(null);
-  const [deptoActivo, setDeptoActivo] = useState(null);
-  const [subDeptoActivo, setSubDeptoActivo] = useState(null);
+  const [selectedChain, setSelectedChain] = useState([]);
 
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  useEffect(() => {
+  const fetchMenu = useCallback(() => {
     if (!user?.username) return;
 
-    fetch(`/api/menu?username=${user.username}`, { cache: "no-store" })
-      .then((res) => res.json())
+    fetch(`/api/menu?username=${encodeURIComponent(user.username)}`, { cache: "no-store" })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
         if (!Array.isArray(data) || data.length === 0) return;
         setMenu(data);
-
-        // Auto-selección inicial si solo hay una ruta posible
-        if (
-          data.length === 1 &&
-          data[0].departamentos.length === 1 &&
-          data[0].departamentos[0].subdepartamentos.length === 1
-        ) {
-          const unicoArea = data[0];
-          const unicoDepto = data[0].departamentos[0];
-          const unicoSub = unicoDepto.subdepartamentos[0];
-          
-          setAreaActiva(unicoArea);
-          setDeptoActivo(unicoDepto);
-          setSubDeptoActivo(unicoSub);
-        }
       })
-      .catch(console.error);
+      .catch((err) => console.error("Error al cargar menú:", err));
   }, [user]);
+
+  useEffect(() => {
+    fetchMenu();
+
+    const handleUpdate = () => {
+      fetchMenu();
+    };
+
+    window.addEventListener("mbc_system_updated", handleUpdate);
+    return () => window.removeEventListener("mbc_system_updated", handleUpdate);
+  }, [fetchMenu]);
+
+  useEffect(() => {
+    // Si no hay nada seleccionado, seleccionar MBC por defecto si existe
+    if (menu.length > 0 && selectedChain.length === 0) {
+      handleSelect(menu[0], 0);
+    }
+  }, [menu]);
 
   const handleLogout = () => {
     setLoggingOut(true);
     setTimeout(() => {
       localStorage.removeItem("usuario_mbc");
+      document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
       router.replace("/login");
-    }, 600);
+    }, 400);
   };
 
-  const seleccionarReporte = (subDepto) => {
-    setSubDeptoActivo(subDepto);
-    router.push(`/dashboard?view=${subDepto.imageName}`);
-  };
+  const handleSelect = (node, levelIndex) => {
+    const newChain = selectedChain.slice(0, levelIndex);
+    newChain[levelIndex] = node;
+    setSelectedChain(newChain);
 
-  // Función estratégica para manejar clics en Áreas
-  const manejarClickArea = (area) => {
-    setAreaActiva(area);
-    setDeptoActivo(null);
-    setSubDeptoActivo(null);
+    if (node.imageName) {
+      router.push(`/dashboard?view=${node.imageName}`);
+    }
 
-    // NUEVA LÓGICA: Si el área solo tiene 1 departamento...
-    if (area.departamentos.length === 1) {
-      const deptoUnico = area.departamentos[0];
-      
-      // Si además ese único depto solo tiene 1 subdepto -> Ir directo al reporte
-      if (deptoUnico.subdepartamentos.length === 1) {
-        setDeptoActivo(deptoUnico);
-        seleccionarReporte(deptoUnico.subdepartamentos[0]);
-      } else {
-        // Si tiene varios subdeptos -> Saltamos el nivel 3 y mostramos el nivel 4 directamente
-        setDeptoActivo(deptoUnico);
-      }
+    if (node.children && node.children.length === 1) {
+      handleSelect(node.children[0], levelIndex + 1);
     }
   };
 
-  // Función estratégica para manejar clics en Departamentos
-  const manejarClickDepto = (depto) => {
-    // Si el depto solo tiene 1 subdepartamento -> Ir directo
-    if (depto.subdepartamentos.length === 1) {
-      setDeptoActivo(depto);
-      seleccionarReporte(depto.subdepartamentos[0]);
-    } else {
-      // Si tiene varios, abrir el nivel 4 normalmente
-      setDeptoActivo(depto);
-      setSubDeptoActivo(null);
+  const rows = [];
+  if (menu.length > 0) {
+    rows.push({
+      level: 0,
+      nodes: menu,
+      activeNode: selectedChain[0],
+    });
+  }
+
+  for (let i = 0; i < selectedChain.length; i++) {
+    const parent = selectedChain[i];
+    if (parent && parent.children && parent.children.length > 0) {
+      rows.push({
+        level: i + 1,
+        nodes: parent.children,
+        activeNode: selectedChain[i + 1],
+      });
     }
+  }
+
+  // Estilo condicional para el nivel 0
+  const getNodeColorClass = (node, isActive) => {
+    if (node.tipoEspecial === "mbc") {
+      // Color Café característico de Cuadra
+      return isActive
+        ? "text-[#78350f] border-[#78350f] font-black"
+        : "text-[#92400e] border-transparent hover:text-[#78350f]";
+    }
+    if (node.tipoEspecial === "esquema") {
+      // Color Negro sobrio
+      return isActive
+        ? "text-black border-black font-black"
+        : "text-gray-500 border-transparent hover:text-black";
+    }
+    // Estilo estándar
+    return isActive
+      ? "text-amber-950 border-amber-900 font-black"
+      : "text-gray-400 border-transparent hover:text-gray-800";
   };
 
   return (
     <div className="flex flex-col w-full bg-white shadow-sm z-50">
-
-      {/* NIVEL 1 - LOGOS Y PERFIL */}
+      {/* BARRA SUPERIOR: LOGOS Y PERFIL */}
       <div className="relative flex justify-center items-center py-3 border-b border-gray-100">
-        <div className="flex items-center gap-4 cursor-pointer" onClick={() => router.push('/dashboard')}>
+        <div
+          className="flex items-center gap-4 cursor-pointer"
+          onClick={() => {
+            if (menu.length > 0) handleSelect(menu[0], 0);
+          }}
+        >
           <img src="/img/GPTW.webp" alt="GPTW" className="h-10 w-auto opacity-90" />
           <img src="/img/01_Cuadra.webp" alt="Cuadra" className="h-7 w-auto" />
         </div>
@@ -132,62 +155,68 @@ export default function HeaderDesktop({ user }) {
         </div>
       </div>
 
-      {/* NIVEL 2 - Áreas */}
-      <div className="flex justify-center gap-8 mt-2 pb-1">
-        {menu.map((area) => (
-          <button
-            key={area.id}
-            onClick={() => manejarClickArea(area)}
-            className={`text-xs font-bold tracking-[0.15em] uppercase border-b-2 px-1 pb-1 cursor-pointer transition-colors ${
-              areaActiva?.id === area.id
-                ? "text-amber-950 border-amber-900"
-                : "text-gray-400 border-transparent hover:text-gray-800"
-            }`}
-          >
-            {area.nombre}
-          </button>
-        ))}
-      </div>
-
-      {/* NIVEL 3 - Departamentos (Se oculta si el área solo tiene un departamento) */}
-      {areaActiva && areaActiva.departamentos.length > 1 && (
-        <div className="w-full bg-gray-50 border-t border-gray-100">
-          <div className="flex justify-center gap-6 py-2">
-            {areaActiva.departamentos.map((depto) => (
-              <button
-                key={depto.id}
-                onClick={() => manejarClickDepto(depto)}
-                className={`text-[11px] font-bold uppercase cursor-pointer transition-colors ${
-                  deptoActivo?.id === depto.id
-                    ? "text-amber-700"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                {depto.nombre}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* NIVEL 4 - Reportes (Solo se muestra si hay opciones múltiples) */}
-      {deptoActivo && deptoActivo.subdepartamentos.length > 1 && (
-        <div className="flex justify-center gap-4 py-2 bg-white border-b border-gray-100">
-          {deptoActivo.subdepartamentos.map((sub) => (
-            <button
-              key={sub.id}
-              onClick={() => seleccionarReporte(sub)}
-              className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full border cursor-pointer transition-all ${
-                subDeptoActivo?.id === sub.id
-                  ? "bg-amber-900 text-white border-amber-900"
-                  : "text-gray-500 border-gray-200 hover:border-gray-400"
-              }`}
-            >
-              {sub.nombre}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* FILAS DINÁMICAS N-NIVELES */}
+      {rows.map((row, idx) => {
+        if (row.level === 0) {
+          return (
+            <div key={idx} className="flex justify-center flex-wrap gap-7 mt-2 pb-2 border-b border-gray-100 px-4">
+              {row.nodes.map((node) => {
+                const isActive = row.activeNode?.id === node.id;
+                return (
+                  <button
+                    key={node.id}
+                    onClick={() => handleSelect(node, row.level)}
+                    className={`text-xs tracking-[0.14em] uppercase border-b-2 px-1 pb-1 cursor-pointer transition-colors ${getNodeColorClass(
+                      node,
+                      isActive
+                    )}`}
+                  >
+                    {node.nombre}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        } else if (row.level === 1) {
+          return (
+            <div key={idx} className="w-full bg-gray-50 border-b border-gray-100">
+              <div className="flex justify-center flex-wrap gap-6 py-2 px-4">
+                {row.nodes.map((node) => (
+                  <button
+                    key={node.id}
+                    onClick={() => handleSelect(node, row.level)}
+                    className={`text-[11px] font-bold uppercase cursor-pointer transition-colors ${
+                      row.activeNode?.id === node.id
+                        ? "text-amber-800 font-extrabold"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    {node.nombre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        } else {
+          return (
+            <div key={idx} className="flex justify-center flex-wrap gap-3 py-2 bg-white border-b border-gray-100 px-4">
+              {row.nodes.map((node) => (
+                <button
+                  key={node.id}
+                  onClick={() => handleSelect(node, row.level)}
+                  className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full border cursor-pointer transition-all ${
+                    row.activeNode?.id === node.id
+                      ? "bg-amber-900 text-white border-amber-900 shadow-sm"
+                      : "text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-800"
+                  }`}
+                >
+                  {node.nombre}
+                </button>
+              ))}
+            </div>
+          );
+        }
+      })}
     </div>
   );
 }

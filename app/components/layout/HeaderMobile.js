@@ -1,43 +1,115 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 export default function HeaderMobile({ user }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState([]);
-
-  const [areaExpandida, setAreaExpandida] = useState(null);
-  const [deptoExpandido, setDeptoExpandido] = useState(null);
-
+  const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [loggingOut, setLoggingOut] = useState(false);
 
-  useEffect(() => {
+  const fetchMenu = useCallback(() => {
     if (!user?.username) return;
 
-    fetch(`/api/menu?username=${user.username}`, { cache: "no-store" })
-      .then((res) => res.json())
+    fetch(`/api/menu?username=${encodeURIComponent(user.username)}`, { cache: "no-store" })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        return res.json();
+      })
       .then((data) => Array.isArray(data) && setMenu(data))
-      .catch(console.error);
+      .catch((err) => console.error("Error al cargar menú móvil:", err));
   }, [user]);
+
+  useEffect(() => {
+    fetchMenu();
+
+    const handleUpdate = () => {
+      fetchMenu();
+    };
+
+    window.addEventListener("mbc_system_updated", handleUpdate);
+    return () => window.removeEventListener("mbc_system_updated", handleUpdate);
+  }, [fetchMenu]);
 
   const handleLogout = () => {
     if (loggingOut) return;
     setLoggingOut(true);
     setTimeout(() => {
       localStorage.removeItem("usuario_mbc");
+      document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
       router.push("/login");
-    }, 500);
+    }, 400);
   };
 
   const seleccionarReporte = (imageName) => {
-    router.push(`/dashboard?view=${imageName}`);
-    setOpen(false);
+    if (imageName) {
+      router.push(`/dashboard?view=${imageName}`);
+      setOpen(false);
+    }
+  };
+
+  const toggleExpand = (nodeId) => {
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  };
+
+  const getNodeColorClassMobile = (node) => {
+    if (node.tipoEspecial === "mbc") return "text-[#78350f] font-black";
+    if (node.tipoEspecial === "esquema") return "text-black font-black";
+    return "text-gray-900 font-bold";
+  };
+
+  const renderMobileNode = (node, depth = 0) => {
+    const hasChildren = node.children && node.children.length > 0;
+    const isExpanded = expandedNodes.has(node.id);
+
+    return (
+      <div key={node.id} className={`border-b border-gray-100 ${depth > 0 ? "pl-4 bg-gray-50/50" : ""}`}>
+        <div className="flex items-center justify-between px-4 py-3">
+          <button
+            onClick={() => {
+              if (node.imageName) {
+                seleccionarReporte(node.imageName);
+              } else if (hasChildren) {
+                toggleExpand(node.id);
+              }
+            }}
+            className={`text-left text-xs uppercase flex-1 ${
+              depth === 0 ? getNodeColorClassMobile(node) : depth === 1 ? "text-amber-900 font-bold" : "text-gray-600 font-medium"
+            }`}
+          >
+            {node.nombre}
+          </button>
+
+          {hasChildren && (
+            <button
+              onClick={() => toggleExpand(node.id)}
+              className="p-1 text-gray-500 hover:text-gray-800 text-xs px-2"
+            >
+              {isExpanded ? "▲" : "▼"}
+            </button>
+          )}
+        </div>
+
+        {hasChildren && isExpanded && (
+          <div className="pb-2">
+            {node.children.map((child) => renderMobileNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
     <nav className="lg:hidden bg-white w-full shadow-sm sticky top-0 z-50">
-      {/* BARRA SUPERIOR */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <button
           onClick={() => setOpen(!open)}
@@ -63,7 +135,6 @@ export default function HeaderMobile({ user }) {
         </div>
       </div>
 
-      {/* DRAWER */}
       {open && (
         <>
           <div
@@ -77,77 +148,9 @@ export default function HeaderMobile({ user }) {
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {menu.map((area) => (
-                <div key={area.id} className="border-b border-gray-100">
-                  <button
-                    onClick={() =>
-                      setAreaExpandida(areaExpandida === area.id ? null : area.id)
-                    }
-                    className="w-full px-5 py-4 flex justify-between text-xs font-bold uppercase"
-                  >
-                    {area.nombre}
-                    <span>{areaExpandida === area.id ? "▲" : "▼"}</span>
-                  </button>
-
-                  {areaExpandida === area.id && (
-                    <div className="px-4 pb-3">
-                      {/* LÓGICA DE ATAJO: Si el área solo tiene un departamento, mostramos sus reportes directo */}
-                      {area.departamentos.length === 1 ? (
-                        <div className="flex flex-wrap gap-2 px-4 pt-2">
-                          {area.departamentos[0].subdepartamentos.map((sub) => (
-                            <button
-                              key={sub.id}
-                              onClick={() => seleccionarReporte(sub.imageName)}
-                              className="px-3 py-1 text-[10px] font-bold uppercase rounded-full border border-amber-900/20 text-amber-900 bg-amber-50"
-                            >
-                              {sub.nombre}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        /* Si tiene varios departamentos, mostramos la lista normal */
-                        area.departamentos.map((depto) => (
-                          <div key={depto.id}>
-                            <button
-                              onClick={() => {
-                                // ATAJO: Si el depto tiene un solo reporte, abrirlo directo
-                                if (depto.subdepartamentos.length === 1) {
-                                  seleccionarReporte(depto.subdepartamentos[0].imageName);
-                                } else {
-                                  setDeptoExpandido(deptoExpandido === depto.id ? null : depto.id);
-                                }
-                              }}
-                              className="w-full px-4 py-2 flex justify-between text-[11px] font-bold uppercase text-gray-700"
-                            >
-                              {depto.nombre}
-                              {depto.subdepartamentos.length > 1 && (
-                                <span>{deptoExpandido === depto.id ? "−" : "+"}</span>
-                              )}
-                            </button>
-
-                            {deptoExpandido === depto.id && depto.subdepartamentos.length > 1 && (
-                              <div className="flex flex-wrap gap-2 px-4 pt-2 pb-2">
-                                {depto.subdepartamentos.map((sub) => (
-                                  <button
-                                    key={sub.id}
-                                    onClick={() => seleccionarReporte(sub.imageName)}
-                                    className="px-3 py-1 text-[10px] font-bold uppercase rounded-full border border-gray-200 text-gray-600 active:bg-amber-900 active:text-white"
-                                  >
-                                    {sub.nombre}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {menu.map((rootNode) => renderMobileNode(rootNode, 0))}
             </div>
 
-            {/* LOGOUT */}
             <div className="p-4 border-t border-gray-100">
               <button
                 onClick={handleLogout}
